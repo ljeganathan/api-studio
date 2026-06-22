@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { Loader2, Save } from 'lucide-react'
 import MethodSelector from './MethodSelector'
 import UrlBar from './UrlBar'
 import TabsPanel from './TabsPanel'
@@ -17,6 +18,7 @@ export default function RequestPanel({ request, prefillResponse }) {
   const [authData, setAuthData] = useState(request?.auth_data || {})
   const [response, setResponse] = useState(prefillResponse || null)
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     loadRequest(request)
@@ -61,11 +63,36 @@ export default function RequestPanel({ request, prefillResponse }) {
     setLoading(false)
   }
 
+  const saveRequest = async () => {
+    if (!request?.id) return
+    setSaving(true)
+    try {
+      await client.put(`/requests/${request.id}`, {
+        method, url, headers, params,
+        body_type: bodyType, body_content: bodyContent,
+        auth_type: authType, auth_data: authData,
+      })
+      toast.success('Request saved')
+    } catch {
+      toast.error('Failed to save request')
+    }
+    setSaving(false)
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
       <div className="flex items-center gap-2 p-3 border-b border-gray-700">
         <MethodSelector method={method} onChange={setMethod} />
         <UrlBar url={url} onChange={setUrl} onSend={sendRequest} loading={loading} />
+        <button
+          onClick={saveRequest}
+          disabled={saving || !request?.id}
+          title="Save request"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 font-semibold text-sm disabled:opacity-50 shrink-0"
+        >
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          Save
+        </button>
       </div>
       <TabsPanel
         params={params} setParams={setParams}

@@ -1,6 +1,15 @@
+import { useEffect } from 'react'
 import { Plus, X } from 'lucide-react'
 
 const MODES = ['none', 'raw', 'form-data', 'x-www-form-urlencoded']
+
+const RAW_CONTENT_TYPES = [
+  { label: 'JSON', value: 'application/json' },
+  { label: 'Text', value: 'text/plain' },
+  { label: 'JavaScript', value: 'application/javascript' },
+  { label: 'HTML', value: 'text/html' },
+  { label: 'XML', value: 'application/xml' },
+]
 
 function parsePairs(content) {
   if (!content) return []
@@ -14,9 +23,33 @@ function serializePairs(pairs) {
   return pairs.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&')
 }
 
-export default function BodyTab({ bodyType, setBodyType, bodyContent, setBodyContent }) {
+function findContentTypeHeader(headers) {
+  return headers.findIndex(h => h.key?.toLowerCase() === 'content-type')
+}
+
+export default function BodyTab({ bodyType, setBodyType, bodyContent, setBodyContent, headers, setHeaders }) {
   const isFormMode = bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded'
   const pairs = isFormMode ? parsePairs(bodyContent) : []
+
+  const setContentTypeHeader = (value) => {
+    const idx = findContentTypeHeader(headers)
+    if (idx === -1) {
+      setHeaders([...headers, { key: 'Content-Type', value, enabled: true }])
+    } else {
+      setHeaders(headers.map((h, i) => (i === idx ? { ...h, value, enabled: true } : h)))
+    }
+  }
+
+  // Raw bodies need an explicit Content-Type or the target API often can't parse them
+  // (and replies with an error body, commonly served as application/problem+json).
+  useEffect(() => {
+    if (bodyType === 'raw' && findContentTypeHeader(headers) === -1) {
+      setContentTypeHeader('application/json')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyType])
+
+  const rawContentType = headers[findContentTypeHeader(headers)]?.value || 'application/json'
 
   const updatePair = (index, field, value) => {
     const next = pairs.map((p, i) => (i === index ? { ...p, [field]: value } : p))
@@ -27,17 +60,28 @@ export default function BodyTab({ bodyType, setBodyType, bodyContent, setBodyCon
 
   return (
     <div className="p-3">
-      <div className="flex gap-1 mb-3">
-        {MODES.map(mode => (
-          <button
-            key={mode}
-            onClick={() => setBodyType(mode)}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors
-              ${bodyType === mode ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex gap-1">
+          {MODES.map(mode => (
+            <button
+              key={mode}
+              onClick={() => setBodyType(mode)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors
+                ${bodyType === mode ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+        {bodyType === 'raw' && (
+          <select
+            value={rawContentType}
+            onChange={e => setContentTypeHeader(e.target.value)}
+            className="bg-gray-800 border border-gray-700 focus:border-orange-400 outline-none rounded-md px-2 py-1 text-xs text-gray-300"
           >
-            {mode}
-          </button>
-        ))}
+            {RAW_CONTENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        )}
       </div>
 
       {bodyType === 'none' && (

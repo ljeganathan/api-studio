@@ -1,11 +1,32 @@
 import { useState, useCallback } from 'react'
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import toast from 'react-hot-toast'
 import TreeNode from './TreeNode'
 import DragDropTree from './DragDropTree'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from './ContextMenu'
 import client from '../../api/client'
+
+function DraggableRequest({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50, position: 'relative' }
+    : undefined
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={isDragging ? 'opacity-50' : ''}>
+      {children}
+    </div>
+  )
+}
+
+function DroppableZone({ id, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div ref={setNodeRef} className={isOver ? 'bg-orange-500/10 rounded-md' : ''}>
+      {children}
+    </div>
+  )
+}
 
 export default function CollectionTree({ collections, onCollectionsChange, onSelectRequest, onImport, onExport, searchTerm = '' }) {
   const [expandedCollections, setExpandedCollections] = useState(new Set())
@@ -132,9 +153,56 @@ export default function CollectionTree({ collections, onCollectionsChange, onSel
     toast.success('Request duplicated')
   }
 
+  const findRequestById = (reqId) => {
+    for (const data of Object.values(collectionData)) {
+      const found = data.requests.find(r => r.id === reqId)
+      if (found) return found
+    }
+    return null
+  }
+
+  const moveRequest = async (active, over) => {
+    const reqId = Number(active.id.slice('request-'.length))
+    const req = findRequestById(reqId)
+    if (!req) return
+
+    let targetCollectionId = null
+    let targetFolderId = null
+    if (over.id.startsWith('folder-')) {
+      const folderId = Number(over.id.slice('folder-'.length))
+      const folder = Object.values(collectionData).flatMap(d => d.folders).find(f => f.id === folderId)
+      if (!folder) return
+      targetCollectionId = folder.collection_id
+      targetFolderId = folder.id
+    } else if (over.id.startsWith('collection-')) {
+      targetCollectionId = Number(over.id.slice('collection-'.length))
+      targetFolderId = null
+    } else {
+      return
+    }
+
+    if (targetCollectionId === req.collection_id && targetFolderId === req.folder_id) return
+
+    const sourceCollectionId = req.collection_id
+    try {
+      await client.put(`/requests/${reqId}`, { collection_id: targetCollectionId, folder_id: targetFolderId })
+      await refreshCollection(targetCollectionId)
+      if (sourceCollectionId !== targetCollectionId) await refreshCollection(sourceCollectionId)
+      toast.success('Request moved')
+    } catch {
+      toast.error('Failed to move request')
+    }
+  }
+
   const handleDragEnd = async (event) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
+
+    if (typeof active.id === 'string' && active.id.startsWith('request-')) {
+      await moveRequest(active, over)
+      return
+    }
+
     const oldIndex = collections.findIndex(c => `collection-${c.id}` === active.id)
     const newIndex = collections.findIndex(c => `collection-${c.id}` === over.id)
     if (oldIndex === -1 || newIndex === -1) return
@@ -197,67 +265,73 @@ export default function CollectionTree({ collections, onCollectionsChange, onSel
                       const folderRequests = data.requests.filter(r => r.folder_id === folder.id)
                       return (
                         <div key={folder.id}>
-                          <ContextMenu>
-                            <ContextMenuTrigger>
-                              <TreeNode
-                                type="folder"
-                                name={folder.name}
-                                depth={1}
-                                hasChildren
-                                expanded={folderExpanded}
-                                onToggle={() => toggleFolder(folder.id)}
-                                onClick={() => toggleFolder(folder.id)}
-                              />
-                            </ContextMenuTrigger>
-                            <ContextMenuContent>
-                              <ContextMenuItem onSelect={() => addRequest(col, folder)}>Add Request</ContextMenuItem>
-                              <ContextMenuSeparator />
-                              <ContextMenuItem onSelect={() => renameFolder(col, folder)}>Rename</ContextMenuItem>
-                              <ContextMenuItem danger onSelect={() => deleteFolder(col, folder)}>Delete</ContextMenuItem>
-                            </ContextMenuContent>
-                          </ContextMenu>
-
-                          {folderExpanded && folderRequests.map(req => (
-                            <ContextMenu key={req.id}>
+                          <DroppableZone id={`folder-${folder.id}`}>
+                            <ContextMenu>
                               <ContextMenuTrigger>
                                 <TreeNode
-                                  type="request"
-                                  name={req.name}
-                                  method={req.method}
-                                  depth={2}
-                                  selected={selectedId === `request-${req.id}`}
-                                  onClick={() => { onSelectRequest(req); setSelectedId(`request-${req.id}`) }}
+                                  type="folder"
+                                  name={folder.name}
+                                  depth={1}
+                                  hasChildren
+                                  expanded={folderExpanded}
+                                  onToggle={() => toggleFolder(folder.id)}
+                                  onClick={() => toggleFolder(folder.id)}
                                 />
                               </ContextMenuTrigger>
                               <ContextMenuContent>
-                                <ContextMenuItem onSelect={() => duplicateRequest(col, req)}>Duplicate</ContextMenuItem>
-                                <ContextMenuItem onSelect={() => renameRequest(col, req)}>Rename</ContextMenuItem>
-                                <ContextMenuItem danger onSelect={() => deleteRequest(col, req)}>Delete</ContextMenuItem>
+                                <ContextMenuItem onSelect={() => addRequest(col, folder)}>Add Request</ContextMenuItem>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onSelect={() => renameFolder(col, folder)}>Rename</ContextMenuItem>
+                                <ContextMenuItem danger onSelect={() => deleteFolder(col, folder)}>Delete</ContextMenuItem>
                               </ContextMenuContent>
                             </ContextMenu>
+                          </DroppableZone>
+
+                          {folderExpanded && folderRequests.map(req => (
+                            <DraggableRequest key={req.id} id={`request-${req.id}`}>
+                              <ContextMenu>
+                                <ContextMenuTrigger>
+                                  <TreeNode
+                                    type="request"
+                                    name={req.name}
+                                    method={req.method}
+                                    depth={2}
+                                    selected={selectedId === `request-${req.id}`}
+                                    onClick={() => { onSelectRequest(req); setSelectedId(`request-${req.id}`) }}
+                                  />
+                                </ContextMenuTrigger>
+                                <ContextMenuContent>
+                                  <ContextMenuItem onSelect={() => duplicateRequest(col, req)}>Duplicate</ContextMenuItem>
+                                  <ContextMenuItem onSelect={() => renameRequest(col, req)}>Rename</ContextMenuItem>
+                                  <ContextMenuItem danger onSelect={() => deleteRequest(col, req)}>Delete</ContextMenuItem>
+                                </ContextMenuContent>
+                              </ContextMenu>
+                            </DraggableRequest>
                           ))}
                         </div>
                       )
                     })}
 
                     {data.requests.filter(r => !r.folder_id).map(req => (
-                      <ContextMenu key={req.id}>
-                        <ContextMenuTrigger>
-                          <TreeNode
-                            type="request"
-                            name={req.name}
-                            method={req.method}
-                            depth={1}
-                            selected={selectedId === `request-${req.id}`}
-                            onClick={() => { onSelectRequest(req); setSelectedId(`request-${req.id}`) }}
-                          />
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem onSelect={() => duplicateRequest(col, req)}>Duplicate</ContextMenuItem>
-                          <ContextMenuItem onSelect={() => renameRequest(col, req)}>Rename</ContextMenuItem>
-                          <ContextMenuItem danger onSelect={() => deleteRequest(col, req)}>Delete</ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
+                      <DraggableRequest key={req.id} id={`request-${req.id}`}>
+                        <ContextMenu>
+                          <ContextMenuTrigger>
+                            <TreeNode
+                              type="request"
+                              name={req.name}
+                              method={req.method}
+                              depth={1}
+                              selected={selectedId === `request-${req.id}`}
+                              onClick={() => { onSelectRequest(req); setSelectedId(`request-${req.id}`) }}
+                            />
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <ContextMenuItem onSelect={() => duplicateRequest(col, req)}>Duplicate</ContextMenuItem>
+                            <ContextMenuItem onSelect={() => renameRequest(col, req)}>Rename</ContextMenuItem>
+                            <ContextMenuItem danger onSelect={() => deleteRequest(col, req)}>Delete</ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      </DraggableRequest>
                     ))}
                   </div>
                 )}

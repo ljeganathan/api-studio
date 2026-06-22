@@ -33,7 +33,10 @@ export default function TabsPanel({
       {active === 'Params' && <ParamsTab params={params} setParams={setParams} />}
       {active === 'Headers' && <HeadersTab headers={headers} setHeaders={setHeaders} />}
       {active === 'Body' && (
-        <BodyTab bodyType={bodyType} setBodyType={setBodyType} bodyContent={bodyContent} setBodyContent={setBodyContent} />
+        <BodyTab
+          bodyType={bodyType} setBodyType={setBodyType} bodyContent={bodyContent} setBodyContent={setBodyContent}
+          headers={headers} setHeaders={setHeaders}
+        />
       )}
       {active === 'Auth' && (
         <AuthTab authType={authType} setAuthType={setAuthType} authData={authData} setAuthData={setAuthData} />

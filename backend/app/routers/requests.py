@@ -57,7 +57,9 @@ def update_request(request_id: int, payload: dict, db: Session = Depends(get_db)
     req = db.query(Request).join(Collection).filter(Request.id == request_id, Collection.owner_id == user.id).first()
     if not req:
         raise HTTPException(404, "Request not found")
-    for field in ("name", "method", "url", "headers", "params", "body_type", "body_content", "auth_type", "auth_data", "folder_id"):
+    if "collection_id" in payload:
+        _owned_collection_or_404(db, payload["collection_id"], user)
+    for field in ("name", "method", "url", "headers", "params", "body_type", "body_content", "auth_type", "auth_data", "collection_id", "folder_id"):
         if field in payload:
             setattr(req, field, payload[field])
     db.commit()
