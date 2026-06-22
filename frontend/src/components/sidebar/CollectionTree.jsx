@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import toast from 'react-hot-toast'
@@ -28,7 +28,7 @@ function DroppableZone({ id, children }) {
   )
 }
 
-export default function CollectionTree({ collections, onCollectionsChange, onSelectRequest, onImport, onExport, searchTerm = '' }) {
+export default function CollectionTree({ collections, onCollectionsChange, onSelectRequest, onImport, onExport, searchTerm = '', refreshSignal }) {
   const [expandedCollections, setExpandedCollections] = useState(new Set())
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [collectionData, setCollectionData] = useState({})
@@ -50,6 +50,12 @@ export default function CollectionTree({ collections, onCollectionsChange, onSel
       toast.error('Failed to load collection contents')
     }
   }, [])
+
+  useEffect(() => {
+    if (refreshSignal?.collectionId != null) {
+      loadCollectionChildren(refreshSignal.collectionId)
+    }
+  }, [refreshSignal, loadCollectionChildren])
 
   const refreshCollection = (collectionId) => loadCollectionChildren(collectionId)
 

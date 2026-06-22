@@ -14,6 +14,7 @@ export default function AppLayout() {
   const [importOpen, setImportOpen] = useState(false)
   const [exportTarget, setExportTarget] = useState(null)
   const [replayData, setReplayData] = useState(null)
+  const [refreshSignal, setRefreshSignal] = useState(null)
 
   useEffect(() => {
     client.get('/collections').then(r => setCollections(r.data))
@@ -40,10 +41,16 @@ export default function AppLayout() {
           onSelectRequest={selectRequest}
           onImport={() => setImportOpen(true)}
           onExport={(col) => setExportTarget(col)}
+          refreshSignal={refreshSignal}
         />
         <main className="flex-1 flex flex-col min-h-0">
           {requestToShow
-            ? <RequestPanel key={requestToShow.id} request={requestToShow} prefillResponse={replayData?.response} />
+            ? <RequestPanel
+                key={requestToShow.id}
+                request={requestToShow}
+                prefillResponse={replayData?.response}
+                onSaved={(saved) => setRefreshSignal({ collectionId: saved.collection_id, version: Date.now() })}
+              />
             : <div className="flex-1 flex items-center justify-center text-gray-500 text-xl">Select a request or create a new one</div>
           }
         </main>

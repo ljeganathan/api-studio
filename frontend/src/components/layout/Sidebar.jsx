@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Search } from 'lucide-react'
 import CollectionTree from '../sidebar/CollectionTree'
 
-export default function Sidebar({ collections, onCollectionsChange, onSelectRequest, onImport, onExport }) {
+export default function Sidebar({ collections, onCollectionsChange, onSelectRequest, onImport, onExport, refreshSignal }) {
   const [search, setSearch] = useState('')
 
   return (
@@ -26,6 +26,7 @@ export default function Sidebar({ collections, onCollectionsChange, onSelectRequ
           onImport={onImport}
           onExport={onExport}
           searchTerm={search}
+          refreshSignal={refreshSignal}
         />
       </div>
     </aside>

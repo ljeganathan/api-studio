@@ -8,7 +8,7 @@ import ResponsePanel from '../response/ResponsePanel'
 import client from '../../api/client'
 import { useRequestStore } from '../../store/requestStore'
 
-export default function RequestPanel({ request, prefillResponse }) {
+export default function RequestPanel({ request, prefillResponse, onSaved }) {
   const {
     method, url, headers, params, bodyType, bodyContent,
     setMethod, setUrl, setHeaders, setParams, setBodyType, setBodyContent, loadRequest,
@@ -67,12 +67,13 @@ export default function RequestPanel({ request, prefillResponse }) {
     if (!request?.id) return
     setSaving(true)
     try {
-      await client.put(`/requests/${request.id}`, {
+      const { data } = await client.put(`/requests/${request.id}`, {
         method, url, headers, params,
         body_type: bodyType, body_content: bodyContent,
         auth_type: authType, auth_data: authData,
       })
       toast.success('Request saved')
+      onSaved?.(data)
     } catch {
       toast.error('Failed to save request')
     }
