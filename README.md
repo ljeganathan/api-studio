@@ -16,9 +16,26 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full architecture and step-by-step build 
 
 ## Quick Start (Docker)
 
+**1. Clone the repo**
 ```bash
 git clone https://github.com/ljeganathan/api-studio.git
 cd api-studio
+```
+
+**2. Create your `.env` file**
+```bash
+cp .env.example .env
+```
+Open `.env` and set a strong `SECRET_KEY` (change the default before running in production):
+```
+SECRET_KEY=your-strong-random-secret-here
+POSTGRES_PASSWORD=apistudio
+```
+
+> `.env` is in `.gitignore` — it will never be committed.
+
+**3. Build and start**
+```bash
 docker compose up -d --build
 ```
 
@@ -83,6 +100,64 @@ Run either with:
 ```bash
 docker exec api-studio-backend-1 python scripts/<script>.py [args]
 ```
+
+## Migrating to Another Machine (Without Losing Data)
+
+Your PostgreSQL data lives in the `pgdata` Docker volume. Use `pg_dump` / `psql` — never copy the raw volume directory, as it is not portable across OS or PostgreSQL versions.
+
+### On the OLD machine
+
+**Step 1 — Dump the database:**
+```bash
+docker compose exec db pg_dump -U apistudio apistudio > apistudio_backup.sql
+```
+
+**Step 2 — Push latest code to GitHub:**
+```bash
+git push origin main
+```
+
+Then copy `apistudio_backup.sql` to the new machine (USB, SCP, Google Drive, etc.).
+
+### On the NEW machine
+
+**Step 1 — Install Docker Desktop**, then clone and configure:
+```bash
+git clone https://github.com/ljeganathan/api-studio.git
+cd api-studio
+cp .env.example .env   # edit SECRET_KEY and any passwords
+```
+
+**Step 2 — Start the database only:**
+```bash
+docker compose up -d db
+```
+
+**Step 3 — Restore the dump:**
+```bash
+docker compose exec -T db psql -U apistudio apistudio < apistudio_backup.sql
+```
+
+**Step 4 — Start everything:**
+```bash
+docker compose up -d --build
+```
+
+**Step 5 — Verify:**
+```bash
+docker compose ps                                                        # all 3 containers Up
+docker compose exec db psql -U apistudio apistudio -c "\dt"             # tables present
+```
+
+### What lives where
+
+| Thing | Location | How to move it |
+|---|---|---|
+| Code | GitHub repo | `git clone` |
+| Database schema + data | `pgdata` Docker volume | `pg_dump` / `psql` restore |
+| Secrets | `.env` file (local only) | Copy manually — never commit |
+
+---
 
 ## Troubleshooting
 
